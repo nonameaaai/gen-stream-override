@@ -34,45 +34,53 @@ function registerGenOverrideCommand() {
             chat.push(msg);
             addOneMessage(msg);
 
-            // DOM 렌더링을 위해 잠깐 대기
-            await new Promise(r => setTimeout(r, 0));
+            // DOM 렌더링을 위해 확실하게 Paint 완료 대기 (Double rAF)
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
             // visible=false 라면 방금 삽입한 메시지 DOM을 숨김
             if (!isVisible) {
                 $('#chat .mes:last').hide();
             }
 
-            // Generate 함수 호출.
-            // swipe 타입은 마지막 메시지 내용을 지우고 새로 생성 (스트리밍 지원)
-            // quiet_prompt 옵션으로 프롬프트 덮어쓰기
-            // quietToLoud: true 옵션은 quiet 프롬프트를 일반 생성처럼 출력하게 해줌
-            await Generate('swipe', { quiet_prompt: String(text), quietToLoud: false });
+            let resultText = '';
+            let generateSuccess = false;
+            try {
+                // Generate 함수 호출.
+                // swipe 타입은 마지막 메시지 내용을 지우고 새로 생성 (스트리밍 지원)
+                // quiet_prompt 옵션으로 프롬프트 덮어쓰기
+                // quietToLoud: true 옵션은 quiet 프롬프트를 일반 생성처럼 출력하게 해줌
+                await Generate('swipe', { quiet_prompt: String(text), quietToLoud: false });
+                generateSuccess = true;
 
-            // 생성이 다 끝났을 때의 텍스트 반환 (파이프 전달용)
-            // swipe 후에는 해당 메시지가 업데이트 되어있음
-            const lastMesObj = chat[chat.length - 1];
-            
-            // 빈 말풍선을 위한 쓰레기 스와이프("") 청소
-            if (lastMesObj && Array.isArray(lastMesObj.swipes)) {
-                const emptyIndex = lastMesObj.swipes.indexOf('');
-                if (emptyIndex !== -1) {
-                    lastMesObj.swipes.splice(emptyIndex, 1);
-                    if (Array.isArray(lastMesObj.swipe_info)) {
-                        lastMesObj.swipe_info.splice(emptyIndex, 1);
-                    }
-                    if (lastMesObj.swipe_id > emptyIndex) {
-                        lastMesObj.swipe_id--;
-                    } else if (lastMesObj.swipe_id === emptyIndex) {
-                        lastMesObj.swipe_id = 0;
+                // 생성이 다 끝났을 때의 텍스트 반환 (파이프 전달용)
+                const lastMesObj = chat[chat.length - 1];
+                
+                // 빈 말풍선을 위한 쓰레기 스와이프("") 청소
+                if (lastMesObj && Array.isArray(lastMesObj.swipes)) {
+                    const emptyIndex = lastMesObj.swipes.indexOf('');
+                    if (emptyIndex !== -1) {
+                        lastMesObj.swipes.splice(emptyIndex, 1);
+                        if (Array.isArray(lastMesObj.swipe_info)) {
+                            lastMesObj.swipe_info.splice(emptyIndex, 1);
+                        }
+                        if (lastMesObj.swipe_id > emptyIndex) {
+                            lastMesObj.swipe_id--;
+                        } else if (lastMesObj.swipe_id === emptyIndex) {
+                            lastMesObj.swipe_id = 0;
+                        }
                     }
                 }
-            }
 
-            const resultText = lastMesObj.mes;
-
-            // visible=false 라면 백그라운드 스트리밍 용도이므로 완성된 메시지를 채팅에서 완전히 삭제
-            if (!isVisible) {
-                await deleteLastMessage();
+                resultText = lastMesObj ? lastMesObj.mes : '';
+            } catch (error) {
+                console.error("'/gen' Override Generation failed or aborted:", error);
+                throw error;
+            } finally {
+                // 실패 시(API 오류 등)에는 visible 여부와 상관없이 무조건 가짜 메시지 정리
+                // 성공 시에는 visible=false일 때만 정리
+                if (!generateSuccess || !isVisible) {
+                    await deleteLastMessage();
+                }
             }
 
             return resultText;
