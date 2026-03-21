@@ -50,7 +50,25 @@ function registerGenOverrideCommand() {
 
             // 생성이 다 끝났을 때의 텍스트 반환 (파이프 전달용)
             // swipe 후에는 해당 메시지가 업데이트 되어있음
-            const resultText = chat[chat.length - 1].mes;
+            const lastMesObj = chat[chat.length - 1];
+            
+            // 빈 말풍선을 위한 쓰레기 스와이프("") 청소
+            if (lastMesObj && Array.isArray(lastMesObj.swipes)) {
+                const emptyIndex = lastMesObj.swipes.indexOf('');
+                if (emptyIndex !== -1) {
+                    lastMesObj.swipes.splice(emptyIndex, 1);
+                    if (Array.isArray(lastMesObj.swipe_info)) {
+                        lastMesObj.swipe_info.splice(emptyIndex, 1);
+                    }
+                    if (lastMesObj.swipe_id > emptyIndex) {
+                        lastMesObj.swipe_id--;
+                    } else if (lastMesObj.swipe_id === emptyIndex) {
+                        lastMesObj.swipe_id = 0;
+                    }
+                }
+            }
+
+            const resultText = lastMesObj.mes;
 
             // visible=false 라면 백그라운드 스트리밍 용도이므로 완성된 메시지를 채팅에서 완전히 삭제
             if (!isVisible) {
