@@ -2,7 +2,7 @@ import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../../slash-commands/SlashCommandArgument.js';
 import { commonEnumProviders } from '../../../slash-commands/SlashCommandCommonEnumsProvider.js';
-import { chat, addOneMessage, Generate, name2, system_message_types, saveSettingsDebounced } from '../../../../script.js';
+import { chat, addOneMessage, Generate, name2, system_message_types, saveSettingsDebounced, deleteLastMessage } from '../../../../script.js';
 import { isTrueBoolean } from '../../../utils.js';
 import { extension_settings } from '../../../extensions.js';
 
@@ -72,8 +72,7 @@ function registerGenOverrideCommand() {
 
             // visible=false 라면 백그라운드 스트리밍 용도이므로 완성된 메시지를 채팅에서 완전히 삭제
             if (!isVisible) {
-                chat.pop();
-                $('#chat .mes:last').remove();
+                await deleteLastMessage();
             }
 
             return resultText;
