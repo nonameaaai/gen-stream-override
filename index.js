@@ -2,8 +2,9 @@ import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from '../../../slash-commands/SlashCommandArgument.js';
 import { commonEnumProviders } from '../../../slash-commands/SlashCommandCommonEnumsProvider.js';
-import { chat, addOneMessage, Generate, name2, system_message_types } from '../../../../script.js';
+import { chat, addOneMessage, Generate, name2, system_message_types, saveSettingsDebounced } from '../../../../script.js';
 import { isTrueBoolean } from '../../../utils.js';
+import { extension_settings } from '../../../extensions.js';
 
 function registerGenOverrideCommand() {
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
@@ -87,14 +88,54 @@ function registerGenOverrideCommand() {
 }
 
 // ST_APP_READY 이벤트 또는 이미 초기화된 경우를 대비한 실행 루틴
-if (window.SillyTavern) {
-    const ctx = window.SillyTavern.getContext();
-    if (ctx && ctx.eventSource && ctx.event_types) {
-        ctx.eventSource.on(ctx.event_types.APP_READY, registerGenOverrideCommand);
-    } else {
-        registerGenOverrideCommand();
+jQuery(async () => {
+    const extensionName = "gen-stream-override";
+    const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
+    const defaultSettings = { enable: true };
+    
+    extension_settings[extensionName] = extension_settings[extensionName] || {};
+    if (Object.keys(extension_settings[extensionName]).length === 0) {
+        Object.assign(extension_settings[extensionName], defaultSettings);
     }
-} else {
-    // Fallback if script loading order differs
-    setTimeout(registerGenOverrideCommand, 500);
-}
+
+    const settingsHtml = await $.get(`${extensionFolderPath}/index.html`);
+    $("#extensions_settings").append(settingsHtml);
+
+    $("#genStreamOverride_enable").prop("checked", extension_settings[extensionName].enable);
+    
+    $("#genStreamOverride_enable").on("change", (event) => {
+        const value = Boolean($(event.target).prop("checked"));
+        const oldValue = extension_settings[extensionName].enable;
+        
+        extension_settings[extensionName].enable = value;
+        saveSettingsDebounced();
+        
+        if (oldValue !== value) {
+            if (value) {
+                registerGenOverrideCommand();
+            } else {
+                toastr.info('설정 저장을 위해 3초 후 페이지가 새로고침 됩니다.', 'gen-stream-override 해제');
+                setTimeout(() => {
+                    location.reload();
+                }, 3000);
+            }
+        }
+    });
+
+    const initCommand = () => {
+        if (extension_settings[extensionName].enable) {
+            registerGenOverrideCommand();
+        }
+    };
+
+    if (window.SillyTavern) {
+        const ctx = window.SillyTavern.getContext();
+        if (ctx && ctx.eventSource && ctx.event_types) {
+            ctx.eventSource.on(ctx.event_types.APP_READY, initCommand);
+        } else {
+            initCommand();
+        }
+    } else {
+        setTimeout(initCommand, 500);
+    }
+});
