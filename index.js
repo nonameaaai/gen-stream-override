@@ -16,7 +16,7 @@ function registerGenOverrideCommand() {
             // as 옵션이 지정되었으면 해당 이름으로, 아니면 기본 캐릭터 이름으로 설정
             const senderName = (args.as ? String(args.as) : String(name2)) || 'System';
             const isSystem = senderName.toLowerCase() === 'system';
-            const isVisible = isTrueBoolean(String(args.visible ?? 'true'));
+            const isVisible = isTrueBoolean(String(args.visible ?? 'false'));
 
             let msg = {
                 name: senderName,
@@ -96,7 +96,7 @@ function registerGenOverrideCommand() {
                 name: 'visible',
                 description: 'Whether to show the streaming process in the chat (true) or generate quietly in the background (false).',
                 typeList: [ARGUMENT_TYPE.BOOLEAN],
-                defaultValue: 'true',
+                defaultValue: 'false',
                 enumList: commonEnumProviders.boolean('trueFalse')(),
             })
         ],
