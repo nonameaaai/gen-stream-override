@@ -17,11 +17,17 @@ function registerGenOverrideCommand() {
             const senderName = (args.as ? String(args.as) : String(name2)) || 'System';
             const isSystem = senderName.toLowerCase() === 'system';
 
-            // visible 인자가 명시적으로 주어지지 않으면 설정값을 폴백으로 사용
+            // visible: 명시 안 하면 설정값 폴백
             const visibleArg = args.visible;
             const isVisible = visibleArg !== undefined
                 ? isTrueBoolean(String(visibleArg))
                 : (extension_settings[extensionName]?.visibleByDefault ?? false);
+
+            // deleteAfter: 명시 안 하면 설정값 폴백 (visible=true일 때만 유효)
+            const deleteAfterArg = args.deleteAfter;
+            const shouldDeleteAfter = deleteAfterArg !== undefined
+                ? isTrueBoolean(String(deleteAfterArg))
+                : (extension_settings[extensionName]?.deleteAfterByDefault ?? false);
 
             let msg = {
                 name: senderName,
@@ -72,7 +78,11 @@ function registerGenOverrideCommand() {
                 console.error("'/gen' Override Generation failed or aborted:", error);
                 throw error;
             } finally {
-                if (!generateSuccess || !isVisible) {
+                // 삭제 조건:
+                // 1. 생성 실패 시 항상 삭제
+                // 2. visible=false 이면 항상 삭제
+                // 3. visible=true + deleteAfter=true 이면 삭제
+                if (!generateSuccess || !isVisible || shouldDeleteAfter) {
                     await deleteLastMessage();
                 }
             }
@@ -92,6 +102,13 @@ function registerGenOverrideCommand() {
                 typeList: [ARGUMENT_TYPE.BOOLEAN],
                 defaultValue: 'false',
                 enumList: commonEnumProviders.boolean('trueFalse')(),
+            }),
+            SlashCommandNamedArgument.fromProps({
+                name: 'deleteAfter',
+                description: 'Only effective when visible=true. If true, deletes the streamed message after generation completes, while still showing the streaming process. If omitted, uses the extension setting.',
+                typeList: [ARGUMENT_TYPE.BOOLEAN],
+                defaultValue: 'false',
+                enumList: commonEnumProviders.boolean('trueFalse')(),
             })
         ],
         unnamedArgumentList: [
@@ -101,22 +118,24 @@ function registerGenOverrideCommand() {
                 isRequired: true
             })
         ],
-        helpString: 'Generates text quietly (like /gen) but streams the output directly into a chat bubble on screen.',
+        helpString: 'Generates text quietly (like /gen) but can stream the output directly into a chat bubble on screen.',
         returns: 'The generated text.'
     }));
 }
 
 jQuery(async () => {
     const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
-    const defaultSettings = { enable: true, visibleByDefault: false };
+    const defaultSettings = { enable: true, visibleByDefault: false, deleteAfterByDefault: false };
 
     extension_settings[extensionName] = extension_settings[extensionName] || {};
     if (Object.keys(extension_settings[extensionName]).length === 0) {
         Object.assign(extension_settings[extensionName], defaultSettings);
     }
-    // 기존 설정에 visibleByDefault가 없을 경우 기본값 보장
-    if (extension_settings[extensionName].visibleByDefault === undefined) {
-        extension_settings[extensionName].visibleByDefault = defaultSettings.visibleByDefault;
+    // 기존 설치 사용자 마이그레이션: 누락된 키에 기본값 보장
+    for (const [key, val] of Object.entries(defaultSettings)) {
+        if (extension_settings[extensionName][key] === undefined) {
+            extension_settings[extensionName][key] = val;
+        }
     }
 
     const settingsHtml = await $.get(`${extensionFolderPath}/index.html`);
@@ -124,6 +143,7 @@ jQuery(async () => {
 
     $("#genStreamOverride_enable").prop("checked", extension_settings[extensionName].enable);
     $("#genStreamOverride_visibleByDefault").prop("checked", extension_settings[extensionName].visibleByDefault);
+    $("#genStreamOverride_deleteAfterByDefault").prop("checked", extension_settings[extensionName].deleteAfterByDefault);
 
     $("#genStreamOverride_enable").on("change", (event) => {
         const value = Boolean($(event.target).prop("checked"));
@@ -146,6 +166,11 @@ jQuery(async () => {
 
     $("#genStreamOverride_visibleByDefault").on("change", (event) => {
         extension_settings[extensionName].visibleByDefault = Boolean($(event.target).prop("checked"));
+        saveSettingsDebounced();
+    });
+
+    $("#genStreamOverride_deleteAfterByDefault").on("change", (event) => {
+        extension_settings[extensionName].deleteAfterByDefault = Boolean($(event.target).prop("checked"));
         saveSettingsDebounced();
     });
 
